@@ -17,8 +17,6 @@ import torch.nn as nn
 from torch.nn import functional as F
 # from torch.distributed.optim import ZeroRedundancyOptimizer
 
-from .sin_init import sinusoidal_
-
 
 # -----------------------------------------------------------------------------
 # PyTorch nn.Module definitions for the GPT-2 model
@@ -134,22 +132,18 @@ class GPT(nn.Module):
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.lm_head.LLMC_SKIP_INIT = True
         self.transformer.wte.weight = self.lm_head.weight
+
+        # Handle initialization, in a customizable way
+        self.init_func = torch.nn.init.normal_
         self.initialize_weights()
 
-    def initialize_weights(self, sin_init=False, seed=42):
-        self.sin_init = sin_init
+    def initialize_weights(self, seed=42):
         # init all weights, use a torch rng object to be very careful
         self.init_rng = torch.Generator()
         self.init_rng.manual_seed(seed)
         self.apply(self._init_weights)
 
-    def to(self, **kwargs):
-        if 'device' in kwargs:
-            self.device = kwargs['device']
-        return super().to(**kwargs)
-
     def _init_weights(self, module):
-        init_ = sinusoidal_ if self.sin_init else torch.nn.init.normal_
         if isinstance(module, nn.Linear):
             # apply special scaled init to the residual projections,
             # per GPT-2 paper
@@ -160,13 +154,20 @@ class GPT(nn.Module):
             # we want to skip initializing lm_head, which shares parameters
             # with wte initialized below during the Embedding's init
             if not hasattr(module, 'LLMC_SKIP_INIT'):
-                init_(
+                self.init_func(
                     module.weight, mean=0.0, std=std, generator=self.init_rng
                 )
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            init_(module.weight, mean=0.0, std=0.02, generator=self.init_rng)
+            self.init_func(
+                module.weight, mean=0.0, std=0.02, generator=self.init_rng
+            )
+
+    def to(self, **kwargs):
+        if 'device' in kwargs:
+            self.device = kwargs['device']
+        return super().to(**kwargs)
 
     def forward(self, idx, targets=None, return_logits=True):
         device = idx.device

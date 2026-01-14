@@ -192,7 +192,6 @@ class Solver(BaseSolver):
         "num_steps": [6200],
         "batch_size": [64],
         "slurm_nodes": [1, 2],
-        "sin_init": [False, True],
     }
     slurm_params = {
         "slurm_gres": "gpu:4",
@@ -230,7 +229,6 @@ class Solver(BaseSolver):
             device = "cuda" if torch.cuda.is_available() else "cpu"
             self.dist = None
 
-        model.initialize_weights(sin_init=self.sin_init, seed=42)
         model = model.to(device=device)
         model.device = device  # store the device in the model
         self.train_dataloader = train_dataloader
