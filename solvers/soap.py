@@ -19,12 +19,6 @@ class Solver(BaseSolver):
         "weight_decay": [5e-3],
         "num_steps": [6200],
         "batch_size": [64],
-        "precondition_frequency": [10],
-        "max_precond_dim": [10000],
-        "merge_dims": [False],
-        "precondition_1d": [False],
-        "normalize_grads": [False],
-        "correct_bias": [True],
         "slurm_nodes": [1, 2],
     }
     slurm_params = {
@@ -35,7 +29,6 @@ class Solver(BaseSolver):
     sampling_strategy = "callback"
 
     def set_objective(self, train_dataloader, model):
-
         # Setup distributed training if needed
         self.dist, self.rank, self.world_size, device = get_running_setup()
 
@@ -77,12 +70,6 @@ class Solver(BaseSolver):
             optim_groups,
             lr=torch.tensor(self.learning_rate),
             betas=(0.95, 0.95),
-            precondition_frequency=self.precondition_frequency,
-            max_precond_dim=self.max_precond_dim,
-            merge_dims=self.merge_dims,
-            precondition_1d=self.precondition_1d,
-            normalize_grads=self.normalize_grads,
-            correct_bias=self.correct_bias,
         )
 
         train_loader = self.train_dataloader.get_distributed_data_generator(
@@ -111,15 +98,11 @@ class Solver(BaseSolver):
                 loss.backward()
                 if self.dist is not None:
                     for param in self.model.parameters():
-                        self.dist.all_reduce(
-                            param.grad, op=self.dist.ReduceOp.AVG
-                        )
+                        self.dist.all_reduce(param.grad, op=self.dist.ReduceOp.AVG)
 
                 scale_lr = get_lr(step, self.num_steps)
                 for param_group in self.optimizer.param_groups:
-                    param_group["lr"] = torch.tensor(
-                        self.learning_rate * scale_lr
-                    )
+                    param_group["lr"] = torch.tensor(self.learning_rate * scale_lr)
 
                 self.optimizer.step()
 
