@@ -98,11 +98,13 @@ class Solver(BaseSolver):
                 loss.backward()
                 if self.dist is not None:
                     for param in self.model.parameters():
-                        self.dist.all_reduce(param.grad, op=self.dist.ReduceOp.AVG)
+                        self.dist.all_reduce(
+                            param.grad, op=self.dist.ReduceOp.AVG)
 
                 scale_lr = get_lr(step, self.num_steps)
                 for param_group in self.optimizer.param_groups:
-                    param_group["lr"] = torch.tensor(self.learning_rate * scale_lr)
+                    param_group["lr"] = torch.tensor(
+                        self.learning_rate * scale_lr)
 
                 self.optimizer.step()
 
