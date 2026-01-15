@@ -90,6 +90,11 @@ class Dataset(BaseDataset):
         'debug': [False]
     }
 
+    test_parameters = {
+        'n_chunks': [2],
+        'debug': [True]
+    }
+
     # List of packages needed to run the dataset. See the corresponding
     # section in objective.py
     requirements = ["huggingface_hub"]

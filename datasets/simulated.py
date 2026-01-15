@@ -20,14 +20,14 @@ class DataLoader:
             yield self.X,
 
 
-def initialize_weights(module, sin_init=False, seed=42):
+def initialize_weights(model, seed=42):
     init_rng = torch.Generator()
     init_rng.manual_seed(seed)
-    init_ = sinusoidal_ if sin_init else torch.nn.init.normal_
-    if isinstance(module, torch.nn.Linear):
-        init_(module.weight, mean=0.0, std=0.02, generator=init_rng)
-        if module.bias is not None:
-            torch.nn.init.zeros_(module.bias)
+    init_func = getattr(model, 'init_func', torch.nn.init.normal_)
+    if isinstance(model, torch.nn.Linear):
+        init_func(model.weight, mean=0.0, std=0.02, generator=init_rng)
+        if model.bias is not None:
+            torch.nn.init.zeros_(model.bias)
 
 
 # All datasets must be named `Dataset` and inherit from `BaseDataset`
@@ -39,10 +39,9 @@ class Dataset(BaseDataset):
     def get_data(self):
 
         model = torch.nn.Linear(10, 1)
+        model.init_func = torch.nn.init.normal_
         model.initialize_weights = (
-            lambda sin_init, seed: initialize_weights(
-                model, sin_init=sin_init, seed=seed
-            )
+            lambda seed: initialize_weights(model, seed=seed)
         )
 
         # The dictionary defines the keyword arguments for `Objective.set_data`
