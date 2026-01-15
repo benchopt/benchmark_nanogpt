@@ -1,8 +1,6 @@
 import torch
 from benchopt import BaseDataset
 
-from benchmark_utils.sin_init import sinusoidal_
-
 
 class DataLoader:
     def __init__(self, train=True):
