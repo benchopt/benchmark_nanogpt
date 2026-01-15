@@ -1,24 +1,14 @@
 from benchopt import BaseSolver
 
-import os
 from contextlib import nullcontext
 
 from tqdm.auto import tqdm
 
 import torch
-import torch.distributed as dist
 
 from benchmark_utils.soap import SOAP
-
-
-# learning rate schedule: stable then decay
-def get_lr(step, num_step, cooldown_frac=0.4):
-    x = step / num_step  # progress in training
-    assert 0 <= x < 1
-    if x < 1 - cooldown_frac:
-        return 1.0
-    else:
-        return (1 - x) / cooldown_frac
+from benchmark_utils.lr_scheduler import get_lr
+from benchmark_utils.running_setup import get_running_setup
 
 
 class Solver(BaseSolver):
@@ -42,32 +32,13 @@ class Solver(BaseSolver):
         "slurm_ntasks_per_node": 4,
     }
 
-    requirements = []
-
     sampling_strategy = "callback"
 
     def set_objective(self, train_dataloader, model):
-        try:
-            import submitit
 
-            submitit.helpers.TorchDistributedEnvironment().export()
-            ddp = int(os.environ.get("RANK", -1)) != -1
-        except (ImportError, RuntimeError):
-            ddp = False
-        if ddp:
-            print("Running in Distributed Data Parallel (DDP) mode")
-            self.rank = int(os.environ["RANK"])
-            self.world_size = int(os.environ["WORLD_SIZE"])
-            assert torch.cuda.is_available()
-            device = torch.device("cuda", 0)
-            torch.cuda.set_device(device)
-            dist.init_process_group(backend="nccl", device_id=device)
-            self.dist = dist
-        else:
-            self.rank = 0
-            self.world_size = 1
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            self.dist = None
+        # Setup distributed training if needed
+        self.dist, self.rank, self.world_size, device = get_running_setup()
+
         model = model.to(device=device)
         model.device = device
         self.train_dataloader = train_dataloader
