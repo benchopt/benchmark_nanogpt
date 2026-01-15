@@ -189,7 +189,7 @@ class SOAP(optim.Optimizer):
                                                  max_precond_dim=group['max_precond_dim'])
 
                 if group["normalize_grads"]:
-                    norm_grad = norm_grad / (1e-6+torch.mean(norm_grad**2)**0.5)
+                    norm_grad = norm_grad / (1e-30+torch.mean(norm_grad**2)**0.5)
 
                 p.add_(norm_grad, alpha=-step_size)
 
@@ -360,9 +360,9 @@ class SOAP(optim.Optimizer):
                 final.append([])
                 continue
             try:
-                _, Q = torch.linalg.eigh(m+1e-30*torch.eye(m.shape[0], device=m.device))
+                _, Q = torch.linalg.eigh(m+1e-6*torch.eye(m.shape[0], device=m.device))
             except:
-                _, Q = torch.linalg.eigh(m.to(torch.float64)+1e-30*torch.eye(m.shape[0], device=m.device))
+                _, Q = torch.linalg.eigh(m.to(torch.float64)+1e-6*torch.eye(m.shape[0], device=m.device))
                 Q = Q.to(m.dtype)
             Q = torch.flip(Q, [1])
 
