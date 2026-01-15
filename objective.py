@@ -30,12 +30,12 @@ class Objective(BaseObjective):
 
     def evaluate_result(self, model, dist=None):
         model.eval()
-        val_batch_size = 32 * 1024  # 32k tokens per batch
+        val_batch_size = 64  # Batch of 64 for validation
         if dist is not None:
             # In distributed mode, we use the distributed data generator
             rank, size = dist.get_rank(), dist.get_world_size()
             val_loader = self.val_dataloader.get_distributed_data_generator(
-                batch_size=val_batch_size * size, rank=rank, world_size=size
+                batch_size=val_batch_size, rank=rank, world_size=size
             )
         else:
             # In non-distributed mode, we use the regular data generator

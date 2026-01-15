@@ -55,7 +55,9 @@ class DistributedDataLoader:
         ]
         effective_batch_size = batch_size * world_size * self.seq_len
         if self.max_tokens is not None:
-            assert self.max_tokens % effective_batch_size == 0
+            assert (self.max_tokens % effective_batch_size) == 0, (
+                "max_tokens must be multiple of effective batch size"
+            )
 
         # Compute local batch size per process
         # We use sequence length 1024 and load the token stream as a flat array
