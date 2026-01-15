@@ -228,6 +228,7 @@ class Solver(BaseSolver):
             self.world_size = 1
             device = "cuda" if torch.cuda.is_available() else "cpu"
             self.dist = None
+
         model = model.to(device=device)
         model.device = device  # store the device in the model
         self.train_dataloader = train_dataloader

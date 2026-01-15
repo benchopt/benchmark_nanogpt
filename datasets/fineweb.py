@@ -97,8 +97,13 @@ class Dataset(BaseDataset):
 
     name = "Fine-web"
     parameters = {
-        'n_chunks': [4],
+        'n_chunks': [40],
         'debug': [False]
+    }
+
+    test_parameters = {
+        'n_chunks': [2],
+        'debug': [True]
     }
 
     # List of packages needed to run the dataset. See the corresponding

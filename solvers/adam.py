@@ -37,6 +37,7 @@ class Solver(BaseSolver):
         'num_steps': [6200],
         'batch_size': [64],
         "slurm_nodes": [1, 2],
+        "sin_init": [True],
     }
     slurm_params = {
         "slurm_gres": "gpu:4",
@@ -74,6 +75,13 @@ class Solver(BaseSolver):
             self.world_size = 1
             device = "cuda" if torch.cuda.is_available() else "cpu"
             self.dist = None
+
+        if self.sin_init:
+            print("Using sinusoidal initialization")
+            from benchmark_utils.sin_init import sinusoidal_
+            model.init_func = sinusoidal_
+            model.initialize_weights(seed=42)
+
         model = model.to(device=device)
         model.device = device  # store the device in the model
         self.train_dataloader = train_dataloader
