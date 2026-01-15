@@ -15,7 +15,7 @@ class Solver(BaseSolver):
     name = "SOAP"
 
     parameters = {
-        "learning_rate": [1e-4],
+        "learning_rate": [3e-3],
         "weight_decay": [5e-3],
         "num_steps": [6200],
         "batch_size": [64],

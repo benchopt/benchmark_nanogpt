@@ -189,7 +189,7 @@ class SOAP(optim.Optimizer):
                                                  max_precond_dim=group['max_precond_dim'])
 
                 if group["normalize_grads"]:
-                    norm_grad = norm_grad / (1e-30+torch.mean(norm_grad**2)**0.5)
+                    norm_grad = norm_grad / (1e-6+torch.mean(norm_grad**2)**0.5)
 
                 p.add_(norm_grad, alpha=-step_size)
 
