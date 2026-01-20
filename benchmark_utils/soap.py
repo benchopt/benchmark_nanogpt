@@ -219,6 +219,8 @@ class SOAP(optim.Optimizer):
         """
         Initializes the preconditioner matrices (L and R in the paper).
         """
+        if grad.ndim <= 1:
+            return grad  # skip projection on 1-dimensional weights
         state['GG'] = [] # Will hold all the preconditioner matrices (L and R in the paper).
         if grad.dim() == 1:
             if not precondition_1d or grad.shape[0] > max_precond_dim:
@@ -243,6 +245,8 @@ class SOAP(optim.Optimizer):
         """
         Projects the gradient to the eigenbases of the preconditioner.
         """
+        if grad.ndim <= 1:
+            return grad  # skip projection on 1-dimensional weights
         original_shape = grad.shape
         if merge_dims:
             if grad.dim() == 4 and self._data_format == 'channels_last':
@@ -272,6 +276,8 @@ class SOAP(optim.Optimizer):
         """
         Updates the preconditioner matrices and the eigenbases (L, R, Q_L, Q_R in the paper).
         """
+        if grad.ndim <= 1:
+            return grad  # skip projection on 1-dimensional weights
         if state["Q"] is not None:
             state["exp_avg"] = self.project_back(state["exp_avg"], state, merge_dims=merge_dims, max_precond_dim=max_precond_dim)
         if grad.dim() == 1:
@@ -312,6 +318,8 @@ class SOAP(optim.Optimizer):
         """
         Projects the gradient back to the original space.
         """
+        if grad.ndim <= 1:
+            return grad  # skip projection on 1-dimensional weights
         original_shape = grad.shape
         if merge_dims:
             if self._data_format == 'channels_last' and grad.dim() == 4:

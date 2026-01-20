@@ -174,7 +174,6 @@ class Solver(BaseSolver):
     # All parameters 'p' defined here are available as 'self.p'.
     parameters = {
         "learning_rate": [0.00036],
-        "cooldown_frac": [0.45],
         "momentum": [0.1],
         "hidden_radius": [50.0],
         "lm_head_radius": [3000.0],
@@ -295,7 +294,7 @@ class Solver(BaseSolver):
                         )
 
                 # determine and set the learning rate for this iteration
-                scale_lr = get_lr(step, self.num_steps, self.cooldown_frac)
+                scale_lr = get_lr(step, self.num_steps)
                 for param_group in self.optimizer.param_groups:
                     param_group["lr"] = torch.tensor(
                         self.learning_rate * scale_lr
