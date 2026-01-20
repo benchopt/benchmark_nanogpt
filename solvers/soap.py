@@ -2,60 +2,50 @@ from benchopt import BaseSolver
 
 from contextlib import nullcontext
 
-import torch
-from torch.optim import AdamW
 from tqdm.auto import tqdm
 
+import torch
+
+from benchmark_utils.soap import SOAP
 from benchmark_utils.lr_scheduler import get_lr
 from benchmark_utils.running_setup import get_running_setup
 
 
 class Solver(BaseSolver):
-
-    name = 'Adam'
+    name = "SOAP"
 
     parameters = {
-        'learning_rate': [1e-3],
-        'weight_decay': [1e-4],
-        'num_steps': [6200],
-        'batch_size': [64],
+        "learning_rate": [3e-3],
+        "weight_decay": [1e-4],
+        "num_steps": [6200],
+        "batch_size": [64],
         "slurm_nodes": [1, 2],
-        "sin_init": [True],
     }
     slurm_params = {
         "slurm_gres": "gpu:4",
         "slurm_ntasks_per_node": 4,
     }
 
-    sampling_strategy = 'callback'
+    sampling_strategy = "callback"
 
     def set_objective(self, train_dataloader, model):
-
         # Setup distributed training if needed
         self.dist, self.rank, self.world_size, device = get_running_setup()
 
-        if self.sin_init:
-            print("Using sinusoidal initialization")
-            from benchmark_utils.sin_init import sinusoidal_
-            model.init_func = sinusoidal_
-            model.initialize_weights(seed=42)
-
         model = model.to(device=device)
-        model.device = device  # store the device in the model
+        model.device = device
         self.train_dataloader = train_dataloader
 
-        # use mixed precision if cuda is available
         self.ctx = (
-            torch.amp.autocast(device_type='cuda', dtype=torch.bfloat16)
-            if torch.cuda.is_available() else nullcontext()
+            torch.amp.autocast(device_type="cuda", dtype=torch.bfloat16)
+            if torch.cuda.is_available()
+            else nullcontext()
         )
 
-        # Torch compile the model and the optimizer step function
         self.model = torch.compile(model, dynamic=False, fullgraph=True)
-        AdamW.step = torch.compile(torch.no_grad(AdamW.step))
+        SOAP.step = torch.compile(torch.no_grad(SOAP.step))
 
     def __del__(self):
-        # Clean up communication resources
         if getattr(self, "dist", None) is not None:
             self.dist.destroy_process_group()
 
@@ -66,31 +56,20 @@ class Solver(BaseSolver):
         self.run_once(stop_val=10)
 
     def run(self, cb):
-
-        # configure the optimizer
-        # List all parameters that require gradients
         param_dict = {
-            pn: p for pn, p in self.model.named_parameters()
-            if p.requires_grad
+            pn: p for pn, p in self.model.named_parameters() if p.requires_grad
         }
-
-        # create optim groups. Any parameters that is 2D will be weight
-        # decayed, otherwise no. i.e. all weight tensors in
-        # matmuls + embeddings decay, all biases and layernorms don't.
-        decay_params = [p for n, p in param_dict.items() if p.dim() >= 2]
-        nodecay_params = [p for n, p in param_dict.items() if p.dim() < 2]
+        decay_params = [p for _, p in param_dict.items() if p.dim() >= 2]
+        nodecay_params = [p for _, p in param_dict.items() if p.dim() < 2]
         optim_groups = [
-            {'params': decay_params, 'weight_decay': self.weight_decay},
-            {'params': nodecay_params, 'weight_decay': 0.0}
+            {"params": decay_params, "weight_decay": self.weight_decay},
+            {"params": nodecay_params, "weight_decay": 0.0},
         ]
 
-        # Create AdamW optimizer
-        # TODO: consider using a ZeroRedundancyOptimizer
-        self.optimizer = AdamW(
+        self.optimizer = SOAP(
             optim_groups,
             lr=torch.tensor(self.learning_rate),
-            betas=(0.9, 0.95),
-            fused=True
+            betas=(0.95, 0.95),
         )
 
         train_loader = self.train_dataloader.get_distributed_data_generator(
@@ -100,7 +79,7 @@ class Solver(BaseSolver):
         )
 
         if self.dist is not None:
-            self.dist.barrier()  # wait for all processes to be ready
+            self.dist.barrier()
 
         step = 0
         with tqdm(total=self.num_steps, desc="Training") as progress:
@@ -112,6 +91,7 @@ class Solver(BaseSolver):
                 progress.update()
                 if step == self.num_steps:
                     break
+
                 data = next(train_loader)
                 with self.ctx:
                     loss, *_ = self.model(*data)
@@ -122,16 +102,15 @@ class Solver(BaseSolver):
                             param.grad, op=self.dist.ReduceOp.AVG
                         )
 
-                # determine and set the learning rate for this iteration
                 scale_lr = get_lr(step, self.num_steps)
                 for param_group in self.optimizer.param_groups:
-                    param_group['lr'] = torch.tensor(
+                    param_group["lr"] = torch.tensor(
                         self.learning_rate * scale_lr
                     )
-                # step the self.optimizer
+
                 self.optimizer.step()
 
     def get_result(self):
         if torch.cuda.is_available():
-            torch.cuda.synchronize()  # wait for all operations to finish
+            torch.cuda.synchronize()
         return dict(model=self.model, dist=self.dist)

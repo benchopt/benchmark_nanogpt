@@ -1,12 +1,12 @@
 from benchopt import BaseSolver
 
-import os
 from contextlib import nullcontext
 
+import torch
 from tqdm.auto import tqdm
 
-import torch
-import torch.distributed as dist
+from benchmark_utils.lr_scheduler import get_lr
+from benchmark_utils.running_setup import get_running_setup
 
 
 # -----------------------------------------------------------------------------
@@ -163,17 +163,6 @@ class ScionLight(torch.optim.Optimizer):
                     G.mul_(1 - momentum)
 
 
-# learning rate schedule: stable then decay to 0
-def get_lr(step, num_steps, cooldown_frac=0.4):
-    x = step / num_steps  # progress in training
-    assert 0 <= x < 1
-    if x < 1 - cooldown_frac:
-        return 1.0
-    else:
-        return (1 - x) / cooldown_frac
-        # return w * 1.0 + (1 - w) * 0.1
-
-
 # The benchmark solvers must be named `Solver` and
 # inherit from `BaseSolver` for `benchopt` to work properly.
 class Solver(BaseSolver):
@@ -185,7 +174,6 @@ class Solver(BaseSolver):
     # All parameters 'p' defined here are available as 'self.p'.
     parameters = {
         "learning_rate": [0.00036],
-        "cooldown_frac": [0.45],
         "momentum": [0.1],
         "hidden_radius": [50.0],
         "lm_head_radius": [3000.0],
@@ -204,30 +192,9 @@ class Solver(BaseSolver):
     sampling_strategy = "callback"
 
     def set_objective(self, train_dataloader, model):
-        # Use submitit helpers to setup distributed training easily.
-        try:
-            import submitit
 
-            submitit.helpers.TorchDistributedEnvironment().export()
-            ddp = int(os.environ.get("RANK", -1)) != -1  # is this a ddp run?
-        except (ImportError, RuntimeError):
-            ddp = False
-        if ddp:
-            print("Running in Distributed Data Parallel (DDP) mode")
-            self.rank = int(os.environ["RANK"])
-            self.world_size = int(os.environ["WORLD_SIZE"])
-            assert torch.cuda.is_available()
-            # TorchDistributedEnvironment sets the visible devices to the
-            # current rank, so we can use the default device.
-            device = torch.device("cuda", 0)
-            torch.cuda.set_device(device)
-            dist.init_process_group(backend="nccl", device_id=device)
-            self.dist = dist
-        else:
-            self.rank = 0
-            self.world_size = 1
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            self.dist = None
+        # Setup distributed training if needed
+        self.dist, self.rank, self.world_size, device = get_running_setup()
 
         model = model.to(device=device)
         model.device = device  # store the device in the model
@@ -327,7 +294,7 @@ class Solver(BaseSolver):
                         )
 
                 # determine and set the learning rate for this iteration
-                scale_lr = get_lr(step, self.num_steps, self.cooldown_frac)
+                scale_lr = get_lr(step, self.num_steps)
                 for param_group in self.optimizer.param_groups:
                     param_group["lr"] = torch.tensor(
                         self.learning_rate * scale_lr
